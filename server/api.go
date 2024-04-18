@@ -213,6 +213,7 @@ func (p *Plugin) sendMailNotification(w http.ResponseWriter, r *http.Request) {
 	// If the body isn't of type json, then reject
 	contentType := r.Header.Get("Content-Type")
 	if contentType != "application/json" {
+		p.API.LogInfo("Body type not json: " + contentType)
 		http.Error(w, "Content types don't match", http.StatusBadRequest)
 		return
 	}
@@ -276,14 +277,15 @@ func (p *Plugin) sendMailNotification(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		lastHistoryIndex := len(historyResponse.History) - 1
-		addedMessages := historyResponse.History[lastHistoryIndex].MessagesAdded
 		messages := []*gmail.Message{}
 
-		for _, addedMessage := range addedMessages {
-			message, _ := gmailService.Users.Messages.Get(emailAddress, addedMessage.Message.Id).Format("raw").Do()
-			messages = append(messages, message)
+		for _, historyElement := range historyResponse.History {
+			for _, addedMessage := range historyElement.MessagesAdded {
+				message, _ := gmailService.Users.Messages.Get(emailAddress, addedMessage.Message.Id).Format("raw").Do()
+				messages = append(messages, message)
+			}
 		}
+
 		p.API.LogInfo(fmt.Sprintf("%d messages received as a part of the notification, filtering based on user's subscriptions", len(messages)))
 		relevantMessages := p.getRelevantMessagesForUser(userID, messages)
 		if len(relevantMessages) < 1 {
@@ -301,7 +303,7 @@ func (p *Plugin) sendMailNotification(w http.ResponseWriter, r *http.Request) {
 			p.API.LogError("Message could not be posted to the user", "err", msgErr.Error())
 			continue
 		}
-		p.API.LogInfo("Updating history ID for the user")
+		p.API.LogInfo("Updating history ID for the user to " + strconv.Itoa(int(historyID)))
 		updateErr := p.updateHistoryIDForUser(historyID, userID)
 		if updateErr != nil {
 			p.API.LogError("Could not update history ID for the user", "err", updateErr.Error())

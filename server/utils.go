@@ -277,7 +277,10 @@ func (p *Plugin) updateOutputChannels(channelIDs []string) *model.AppError {
 func (p *Plugin) getOutputChannels() ([]string, *model.AppError) {
 	p.API.LogInfo("Getting channels from KVGet")
 	channels, err := p.API.KVGet("outputChannels")
-	p.API.LogInfo("Channels from KVGET: " + string(channels))
+	if (channels == nil || string(channels) == "") {
+		//returning empty array instead of nil
+		return []string{}, nil
+	}
 	return strings.Split(string(channels), ","), err
 }
 

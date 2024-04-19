@@ -159,7 +159,7 @@ func (p *Plugin) handleAddOutputChannelCommand(c *plugin.Context, args *model.Co
 }
 
 func (p *Plugin) handleRemoveOutputChannelCommand(c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
-	p.API.LogInfo("Handling add output channel command")
+	p.API.LogInfo("Handling remove output channel command")
 
 	//Get channelID of Channel to remove
 	arguments := strings.Fields(args.Command)
@@ -181,9 +181,14 @@ func (p *Plugin) handleRemoveOutputChannelCommand(c *plugin.Context, args *model
 			newChannelIds = append(newChannelIds, channel)
 		}
 	}
-	p.updateOutputChannels(newChannelIds)
 
-	return &model.CommandResponse{}, nil
+	err = p.updateOutputChannels(newChannelIds)
+
+	if (err != nil) {
+		p.API.LogError("Error setting outputchannels: " + err.Message)
+	}
+
+	return &model.CommandResponse{}, err
 }
 
 // handleConfigureChannelCommand configures which channe bot will post notifications in
@@ -194,7 +199,7 @@ func (p *Plugin) handleShowOutputChannelCommand(c *plugin.Context, args *model.C
 	channelIds, err := p.getOutputChannels()
 
 	if (err != nil) {
-		p.API.LogInfo("Error! Could not get OutputChannels: " + err.Message)
+		p.API.LogError("Error! Could not get OutputChannels: " + err.Message)
 		p.sendMessageFromBot(args.ChannelId, args.UserId, true, "Error! Could not get OutputChannels: " + err.Message)
 		return &model.CommandResponse{}, err
 	}

@@ -293,16 +293,53 @@ func (p *Plugin) sendMailNotification(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		p.API.LogInfo(fmt.Sprintf("%d messages relevant based on user's subscriptions", len(relevantMessages)))
-		directChannel, channelErr := p.API.GetDirectChannel(userID, p.gmailBotID)
-		if channelErr != nil {
-			p.API.LogError("Could not fetch direct channel for the user", "err", channelErr.Error())
-			continue
+
+		// teams, teamsErr := p.API.GetTeams()
+
+		// if teamsErr != nil {
+		// 	p.API.LogError("Couldn't list teams")
+		// 	continue
+		// }
+
+		// teamSize := len(teams)
+		// teamID := teams[teamSize - 1].Id
+
+		// p.API.LogInfo("Loon - TeamID: " + teamID)
+
+		// channels, _ := p.API.GetPublicChannelsForTeam(teamID, 0, 100)
+		// for _, channel := range channels {
+		// 	p.API.LogInfo("Found channel name: " + channel.Name + ", display name: " + channel.DisplayName + ", ID: " + channel.Id)
+		// }
+
+		// directChannel := channels[len(channels) - 1]
+
+		outputChannelsIds := []string{}
+		outputChannelsIds, err = p.getOutputChannels()
+
+		if (err != nil) {
+			p.API.LogError("Error fetching configured channels. Outputting to user DM. Error: ")
+			directChannel, _ := p.API.GetDirectChannel(userID, p.gmailBotID)
+			outputChannelsIds = append(outputChannelsIds, directChannel.Id)
 		}
-		msgErr := p.handleMessages(relevantMessages, directChannel.Id, userID, true)
-		if msgErr != nil {
-			p.API.LogError("Message could not be posted to the user", "err", msgErr.Error())
-			continue
+		p.API.LogInfo("Using the channels: " + strings.Join(outputChannelsIds[:], ", ") + " for messages.")
+
+		//directChannel, channelErr := p.API.GetDirectChannel(userID, p.gmailBotID)
+		//directChannel, channelErr := p.API.GetChannelByName("test", teamID, false)
+//		if channelErr != nil {
+//			p.API.LogError("Could not fetch direct channel for the user", "err", channelErr.Error())
+//			continue
+//		}
+		//msgErr := p.handleMessages(relevantMessages, directChannel.Id, userID, true)
+
+		// Post output in all configured channels
+		for _, outputChannelId := range outputChannelsIds {
+			msgErr := p.handleMessages(relevantMessages, outputChannelId, p.gmailBotID, true)
+			if msgErr != nil {
+				p.API.LogError("Message could not be posted to the user", "err", msgErr.Error())
+				continue
+			}	
 		}
+
 		p.API.LogInfo("Updating history ID for the user to " + strconv.Itoa(int(historyID)))
 		updateErr := p.updateHistoryIDForUser(historyID, userID)
 		if updateErr != nil {

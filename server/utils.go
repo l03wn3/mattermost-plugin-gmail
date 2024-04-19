@@ -268,6 +268,19 @@ func (p *Plugin) getUsersForGmail(gmailID string) ([]string, error) {
 	return strings.Split(string(users), ","), nil
 }
 
+// updateOutputChannel updates the ID o the channel(s) where the gmail bot is a member and posts
+func (p *Plugin) updateOutputChannels(channelIDs []string) *model.AppError {
+	return p.API.KVSet("outputChannels", []byte(strings.Join(channelIDs, ",")))
+}
+
+// updateOutputChannel returns the ID o the channel(s) where the gmail bot is a member and posts
+func (p *Plugin) getOutputChannels() ([]string, *model.AppError) {
+	p.API.LogInfo("Getting channels from KVGet")
+	channels, err := p.API.KVGet("outputChannels")
+	p.API.LogInfo("Channels from KVGET: " + string(channels))
+	return strings.Split(string(channels), ","), err
+}
+
 // updateSubscriptionsOfUser updates subscriptions of the user
 func (p *Plugin) updateSubscriptionsOfUser(userID string, labelIDs []string) *model.AppError {
 	return p.API.KVSet(userID+"subscriptions", []byte(strings.Join(labelIDs, ",")))

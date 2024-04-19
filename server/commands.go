@@ -41,6 +41,14 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *model.CommandArgs) (*mo
 		return p.handleSubscriptionCommands(c, args, action)
 	case "subscriptions":
 		return p.handleListSubscriptionsCommand(c, args)
+	case "setoutputchannel":
+		return p.handleSetOutputChannelCommand(c, args)
+	case "addoutputchannel":
+		return p.handleAddOutputChannelCommand(c, args)
+	case "removeoutputchannel":
+		return p.handleRemoveOutputChannelCommand(c, args)
+	case "showoutputchannels":
+		return p.handleShowOutputChannelCommand(c, args)
 	case "":
 		return p.handleHelpCommand(c, args)
 	case "help":
@@ -65,6 +73,144 @@ func (p *Plugin) handleConnectCommand(c *plugin.Context, args *model.CommandArgs
 
 	// Send an ephemeral post with the link to connect gmail
 	p.sendMessageFromBot(args.ChannelId, args.UserId, true, fmt.Sprintf("[Click here to connect your Gmail account with Mattermost.](%s/plugins/%s/oauth/connect)", *siteURL, manifest.Id))
+
+	return &model.CommandResponse{}, nil
+}
+
+func (p *Plugin) getChannelIdFromName(channelTarget string, teamId string) (string) {
+	channels, _ := p.API.GetPublicChannelsForTeam(teamId, 0, 100)
+	p.API.LogInfo(fmt.Sprintf("Found %d channels for team", len(channels)))
+
+	p.API.LogInfo("Looking for channel named: '" + channelTarget + "'")
+	var foundChannelId string
+	for _, channel := range channels { 
+		p.API.LogInfo("Candidate channel name: " + channel.Name + ", display name: " + channel.DisplayName + ", ID: " + channel.Id)
+		if strings.EqualFold(channelTarget, channel.DisplayName) {
+			foundChannelId = channel.Id
+			p.API.LogInfo("Found channel name: " + channel.Name + ", display name: " + channel.DisplayName + ", ID: " + channel.Id)
+			break
+		}
+	} 
+
+	return foundChannelId
+}
+
+// handleSetOutputChannelCommand configures which channe bot will post notifications in
+func (p *Plugin) handleSetOutputChannelCommand(c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
+
+	p.API.LogInfo("Handling configure channel command")
+
+	arguments := strings.Fields(args.Command)
+
+	if len(arguments) < 3 {
+		p.sendMessageFromBot(args.ChannelId, args.UserId, true, "Too few arguments to configure channel command ")
+		return &model.CommandResponse{}, nil
+	}
+
+	channelTarget := strings.Join(arguments[2:], " ") //combine all words to one channel display name
+	channels, _ := p.API.GetPublicChannelsForTeam(args.TeamId, 0, 100)
+
+	p.API.LogInfo(fmt.Sprintf("Found %d channels for team", len(channels)))
+	p.API.LogInfo("Looking for channel named: '" + channelTarget + "'")
+	p.sendMessageFromBot(args.ChannelId, args.UserId, true, "Looking for channel named: '" + channelTarget + "'")
+
+	foundChannels := []string{}
+
+	for _, channel := range channels { 
+
+		p.sendMessageFromBot(args.ChannelId, args.UserId, true, "Candidate channel name: " + channel.Name + ", display name: " + channel.DisplayName + ", ID: " + channel.Id)
+
+		if strings.EqualFold(channelTarget, channel.DisplayName) {
+			foundChannels = append(foundChannels, channel.Id)
+			p.API.LogInfo("Found channel name: " + channel.Name + ", display name: " + channel.DisplayName + ", ID: " + channel.Id)
+			p.sendMessageFromBot(args.ChannelId, args.UserId, true, "Found channel name: " + channel.Name + ", display name: " + channel.DisplayName + ", ID: " + channel.Id)
+			break
+		}
+	} 
+	
+	if len(foundChannels) < 1 {
+		p.API.LogInfo("Found no such channel:" + channelTarget)
+		p.sendMessageFromBot(args.ChannelId, args.UserId, true, "Found no such channel:" + channelTarget)
+		return &model.CommandResponse{}, nil
+	}
+
+	p.updateOutputChannels(foundChannels)
+	return &model.CommandResponse{}, nil
+}
+
+func (p *Plugin) handleAddOutputChannelCommand(c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
+	p.API.LogInfo("Handling add output channel command")
+		
+	channelIds, err := p.getOutputChannels()
+	if (err != nil) {
+		p.API.LogInfo("Error! Could not get OutputChannels: " + err.Message)
+		p.sendMessageFromBot(args.ChannelId, args.UserId, true, "Error! Could not get OutputChannels: " + err.Message)
+		return &model.CommandResponse{}, err
+	}
+
+	arguments := strings.Fields(args.Command)
+	channelTarget := strings.Join(arguments[2:], " ") //combine all words to one channel display name
+	newChannelId := p.getChannelIdFromName(channelTarget, args.TeamId)
+
+	channelIds = append(channelIds, newChannelId)
+	p.updateOutputChannels(channelIds)
+
+	return &model.CommandResponse{}, nil
+}
+
+func (p *Plugin) handleRemoveOutputChannelCommand(c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
+	p.API.LogInfo("Handling add output channel command")
+
+	//Get channelID of Channel to remove
+	arguments := strings.Fields(args.Command)
+	channelTarget := strings.Join(arguments[2:], " ") //combine all words to one channel display name
+	channelIdToRemove := p.getChannelIdFromName(channelTarget, args.TeamId)
+
+	//Get current outputchannels
+	channelIds, err := p.getOutputChannels()
+	if (err != nil) {
+		p.API.LogInfo("Error! Could not get OutputChannels: " + err.Message)
+		p.sendMessageFromBot(args.ChannelId, args.UserId, true, "Error! Could not get OutputChannels: " + err.Message)
+		return &model.CommandResponse{}, err
+	}
+
+	//Create new array with channels, excepting the one to remove
+	newChannelIds := []string{}
+	for _, channel := range channelIds {
+		if channel != channelIdToRemove {
+			newChannelIds = append(newChannelIds, channel)
+		}
+	}
+	p.updateOutputChannels(newChannelIds)
+
+	return &model.CommandResponse{}, nil
+}
+
+// handleConfigureChannelCommand configures which channe bot will post notifications in
+func (p *Plugin) handleShowOutputChannelCommand(c *plugin.Context, args *model.CommandArgs) (*model.CommandResponse, *model.AppError) {
+
+	p.API.LogInfo("Handling show output channel command")
+
+	channelIds, err := p.getOutputChannels()
+
+	if (err != nil) {
+		p.API.LogInfo("Error! Could not get OutputChannels: " + err.Message)
+		p.sendMessageFromBot(args.ChannelId, args.UserId, true, "Error! Could not get OutputChannels: " + err.Message)
+		return &model.CommandResponse{}, err
+	}
+
+	if len(channelIds) < 1 {
+		p.API.LogInfo("No channels saved for output")
+		p.sendMessageFromBot(args.ChannelId, args.UserId, true, "No channels saved for output")
+		return &model.CommandResponse{}, nil
+	}
+
+	for _, channelId := range channelIds { 
+		channel, _ := p.API.GetChannel(channelId)
+		channelDisplayName := channel.DisplayName
+		p.API.LogInfo(args.ChannelId, args.UserId, true, "Will show output in channel: " + channelDisplayName)
+		p.sendMessageFromBot(args.ChannelId, args.UserId, true, "Will show output in channel: " + channelDisplayName)
+	}
 
 	return &model.CommandResponse{}, nil
 }

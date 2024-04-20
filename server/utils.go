@@ -270,6 +270,7 @@ func (p *Plugin) getUsersForGmail(gmailID string) ([]string, error) {
 
 // updateOutputChannel updates the ID o the channel(s) where the gmail bot is a member and posts
 func (p *Plugin) updateOutputChannels(channelIDs []string) *model.AppError {
+	p.API.LogInfo(fmt.Sprintf("Setting outputchannels to %d channels.", len(channelIDs)))
 	return p.API.KVSet("outputChannels", []byte(strings.Join(channelIDs, ",")))
 }
 

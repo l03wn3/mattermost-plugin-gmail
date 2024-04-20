@@ -153,7 +153,14 @@ func (p *Plugin) handleAddOutputChannelCommand(c *plugin.Context, args *model.Co
 	newChannelId := p.getChannelIdFromName(channelTarget, args.TeamId)
 
 	channelIds = append(channelIds, newChannelId)
-	p.updateOutputChannels(channelIds)
+	err = p.updateOutputChannels(channelIds)
+	if (err != nil) {
+		p.API.LogError("Error setting outputchannels: " + err.Message)
+	}
+
+	outputString := "Added channel " + channelTarget + " as output channel"
+	p.sendMessageFromBot(args.ChannelId, args.UserId, true, outputString)
+	p.API.LogInfo(outputString)
 
 	return &model.CommandResponse{}, nil
 }
@@ -175,18 +182,23 @@ func (p *Plugin) handleRemoveOutputChannelCommand(c *plugin.Context, args *model
 	}
 
 	//Create new array with channels, excepting the one to remove
+	outputChannelNames  := ""
 	newChannelIds := []string{}
 	for _, channel := range channelIds {
 		if channel != channelIdToRemove {
 			newChannelIds = append(newChannelIds, channel)
+			newChannel, _ := p.API.GetChannel(channel)
+			outputChannelNames += newChannel.DisplayName + ", "
 		}
 	}
 
 	err = p.updateOutputChannels(newChannelIds)
-
 	if (err != nil) {
 		p.API.LogError("Error setting outputchannels: " + err.Message)
 	}
+	outputString := "Removed channel " + channelTarget + ". Now outputting to channels: " + outputChannelNames
+	p.sendMessageFromBot(args.ChannelId, args.UserId, true, outputString)
+	p.API.LogInfo(outputString)
 
 	return &model.CommandResponse{}, err
 }
@@ -210,12 +222,15 @@ func (p *Plugin) handleShowOutputChannelCommand(c *plugin.Context, args *model.C
 		return &model.CommandResponse{}, nil
 	}
 
+	//Concatenate output
+	outputString := "Will show output in channels: "
 	for _, channelId := range channelIds { 
 		channel, _ := p.API.GetChannel(channelId)
 		channelDisplayName := channel.DisplayName
-		p.API.LogInfo(args.ChannelId, args.UserId, true, "Will show output in channel: " + channelDisplayName)
-		p.sendMessageFromBot(args.ChannelId, args.UserId, true, "Will show output in channel: " + channelDisplayName)
+		outputString = outputString + channelDisplayName + ", "
 	}
+	p.API.LogInfo(args.ChannelId, args.UserId, true, outputString)
+	p.sendMessageFromBot(args.ChannelId, args.UserId, true, outputString)
 
 	return &model.CommandResponse{}, nil
 }
